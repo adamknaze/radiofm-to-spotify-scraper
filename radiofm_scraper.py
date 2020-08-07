@@ -82,7 +82,7 @@ def radiofm_scrape_tracks(url):
     tracks_list = []
 
     soup = BeautifulSoup(html.text, 'html.parser')
-    rows = soup.find_all("table", class_="playlist", limit=1)[0].find("tbody").find_all("tr")
+    rows = soup.find_all("table", {"class" : "table--playlist"}, limit=1)[0].find("tbody").find_all("tr")
     for row in rows:
         cells = row.find_all("td")
         tracks_list.append((cells[3].get_text(), cells[2].get_text()))
