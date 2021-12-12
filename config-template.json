@@ -1,0 +1,7 @@
+{
+    "user": "user",
+    "playlist": "radiofm_playlist",
+    "passw": "the_password",
+    "db": "db_address",
+    "url": "https://fm.rtvs.sk/playlist"
+}
