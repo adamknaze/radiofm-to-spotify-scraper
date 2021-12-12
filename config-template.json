@@ -3,5 +3,7 @@
     "playlist": "radiofm_playlist",
     "passw": "the_password",
     "db": "db_address",
-    "url": "https://fm.rtvs.sk/playlist"
+    "url": "https://fm.rtvs.sk/playlist",
+    "sp_client_id": "id",
+    "sp_client_secret": "id"
 }

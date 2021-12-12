@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 import itertools
 import spotipy
-import spotipy.util as util
+from spotipy.oauth2 import SpotifyOAuth
 from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 import psycopg2 as pg
@@ -28,11 +28,10 @@ def scrape_n_store(config, hours=13):
     tracks, timestamps = scrape_range(config['url'], hours)
 
     # find on spofity
-    token = util.prompt_for_user_token(config['user'], 'playlist-modify-public')
-    if not token:
-        print ("Can't get token for", config['user'])
-        sys.exit(0)
-    sp = spotipy.Spotify(auth=token)
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
+                                                   client_id=config['sp_client_id'],
+                                                   client_secret=config['sp_client_secret'],
+                                                   redirect_uri='http://localhost:8080/'))
 
     # insert into DB
     cur = conn.cursor()

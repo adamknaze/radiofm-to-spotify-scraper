@@ -1,9 +1,8 @@
-import sys
 import os
 import argparse
 import json
 import spotipy
-import spotipy.util as util
+from spotipy.oauth2 import SpotifyOAuth
 import psycopg2 as pg
 
 
@@ -25,11 +24,10 @@ def spotify_add_tracks(config, start, stop):
     track_ids = [x[0] for x in results]
 
     # add on spotify
-    token = util.prompt_for_user_token(config['user'], 'playlist-modify-public')
-    if not token:
-        print ("Can't get token for", config['user'])
-        sys.exit(0)
-    sp = spotipy.Spotify(auth=token)
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
+                                                   client_id=config['sp_client_id'],
+                                                   client_secret=config['sp_client_secret'],
+                                                   redirect_uri='http://localhost:8080/'))
 
     playlist_id = None
     playlists = sp.user_playlists(config['user'])
