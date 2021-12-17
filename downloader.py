@@ -1,4 +1,6 @@
 import os
+import re
+import datetime
 import argparse
 import json
 import spotipy
@@ -18,7 +20,7 @@ def spotify_add_tracks(config, start, stop):
 
     cur = conn.cursor()
     cur.execute("SELECT spotify_id FROM radiofm WHERE spotify_id IS NOT NULL\
-         AND time BETWEEN '" + start + "' AND '" + stop + "'")
+         AND time BETWEEN '" + start + "' AND '" + stop + "' ORDER BY time")
     results = cur.fetchall()
 
     track_ids = [x[0] for x in results]
@@ -38,8 +40,11 @@ def spotify_add_tracks(config, start, stop):
         new_playlist = sp.user_playlist_create(config['user'], config['playlist'])
         playlist_id = new_playlist['id']
 
-    sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids)
-    print('Succesfully added '+str(len(track_ids))+' songs to playlist '+config['playlist']+' of user '+config['user'])
+    if not len(track_ids) == 0:
+        sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids)
+        print('Succesfully added '+str(len(track_ids))+' songs to playlist '+config['playlist']+' of user '+config['user'])
+    else:
+        print('No Spotify tracks found in selected range.')
 
     cur.close()
     conn.close()
@@ -50,24 +55,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Import songs scraped from radiofm to spotify playlist')
     subparsers = parser.add_subparsers(help='Select action')
     
-    prs_conf = subparsers.add_parser('load', help='Load from config.json file')
-    prs_conf.add_argument('-start', help='time from "1990-11-25 12:34"')
-    prs_conf.add_argument('-stop', help='time from "1990-11-25 13:34"')
-    prs_conf.set_defaults(action='load')
+    prs_conf = subparsers.add_parser('conf', help='Load from config.json file')
+    prs_conf.add_argument('start', help='time from "1990-11-25 12:34"')
+    prs_conf.add_argument('stop', help='time from "1990-11-25 13:34"')
+    prs_conf.set_defaults(action='conf')
 
     prs_args = subparsers.add_parser('args', help='Supply args')
-    prs_args.add_argument('-user', help='Spotify username')
-    prs_args.add_argument('--playlist', default='radiofm_playlist', help='Spotify playlist')
-    prs_args.add_argument('-start', help='time from "1990-11-25 12:34"')
-    prs_args.add_argument('-stop', help='time from "1990-11-25 13:34"')
-    prs_args.add_argument('-passw', help='DB password')
-    prs_args.add_argument('-db', help='DB host')
-    prs_args.add_argument('--url', default='https://fm.rtvs.sk/playlist', help='Radiofm playlist url')
+    prs_args.add_argument('user', help='Spotify username')
+    prs_args.add_argument('-playlist', default='radiofm_playlist', help='Spotify playlist')
+    prs_args.add_argument('start', help='time from "1990-11-25 12:34"')
+    prs_args.add_argument('stop', help='time from "1990-11-25 13:34"')
+    prs_args.add_argument('passw', help='DB password')
+    prs_args.add_argument('db', help='DB host')
+    prs_args.add_argument('-url', default='https://fm.rtvs.sk/playlist', help='Radiofm playlist url')
     prs_args.set_defaults(action='args')
 
     args = parser.parse_args()
 
-    if args.action == 'load' and os.path.exists('config.json'):
+    if args.action == 'conf' and os.path.exists('config.json'):
         with open('config.json', 'r') as f:
             config = json.load(f)
 
@@ -80,4 +85,11 @@ if __name__ == "__main__":
             'url': args.url
         }
     
-    spotify_add_tracks(config, args.start, args.stop)
+    start, stop = args.start, args.stop
+    if not re.search('[0-9]{4}', args.start) and not re.search('[0-9]{4}', args.stop):
+        now = datetime.datetime.now()
+        start = str(now.year) + ',' + start
+        stop = str(now.year) + ',' + stop
+        print(start, stop)
+
+    spotify_add_tracks(config, start, stop)

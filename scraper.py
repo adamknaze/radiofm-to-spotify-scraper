@@ -8,9 +8,10 @@ from spotipy.oauth2 import SpotifyOAuth
 from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 import psycopg2 as pg
+from psycopg2.errors import UniqueViolation
 
 
-def scrape_n_store(config, hours=13):
+def scrape_n_store(config, hours=5):
     '''
     Scrape tracks from RadioFM playlist, search last <HOURS> hours.
     Insert to db.
@@ -27,13 +28,12 @@ def scrape_n_store(config, hours=13):
     # scrape tracks
     tracks, timestamps = scrape_range(config['url'], hours)
 
-    # find on spofity
+    # find on spofity & insert into db
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
                                                    client_id=config['sp_client_id'],
                                                    client_secret=config['sp_client_secret'],
                                                    redirect_uri='http://localhost:8080/'))
 
-    # insert into DB
     cur = conn.cursor()
     cur.execute('SELECT time FROM radiofm ORDER BY time DESC NULLS LAST LIMIT 1')
     maxtime_db = cur.fetchone()
@@ -57,7 +57,10 @@ def scrape_n_store(config, hours=13):
         values = ["E'" + x.replace("'", "\\'") + "'" for x in values]
 
         sql = "INSERT INTO radiofm (" + ', '.join(columns) + ") VALUES ("+ ', '.join(values) + ")"
-        cur.execute(sql)
+        try:
+            cur.execute(sql)
+        except UniqueViolation:
+            pass
 
     conn.commit()
     cur.close()
@@ -71,8 +74,8 @@ def find_on_spotify(sp, artist, song):
     track_name_words = song.split()
     artist_name_words = artist.split()
     search_strings = []
-    search_strings.append(song)
     search_strings.append(song + ' ' + artist)
+    search_strings.append(song)
     for i in range(len(track_name_words)):
         if (i > 4):
             break
