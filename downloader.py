@@ -90,6 +90,5 @@ if __name__ == "__main__":
         now = datetime.datetime.now()
         start = str(now.year) + ',' + start
         stop = str(now.year) + ',' + stop
-        print(start, stop)
 
     spotify_add_tracks(config, start, stop)
