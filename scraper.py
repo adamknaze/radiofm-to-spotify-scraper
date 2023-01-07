@@ -45,7 +45,7 @@ def scrape_n_store(config, hours=5):
 
         try:
             track_id = find_on_spotify(sp, tracks[i][0], tracks[i][1])
-        except Exception as e:    
+        except Exception as e:
             print(e) 
             track_id = None
 
@@ -69,8 +69,6 @@ def scrape_n_store(config, hours=5):
 
 def find_on_spotify(sp, artist, song):
 
-    track_id = None
-
     track_name_words = song.split()
     artist_name_words = artist.split()
     search_strings = []
@@ -92,10 +90,9 @@ def find_on_spotify(sp, artist, song):
         if (fuzz.token_set_ratio(song, item['name']) > 75):
             for found_artist in item['artists']:
                 if (fuzz.token_set_ratio(artist, found_artist['name']) > 75):
-                    track_id = item['id']
-                    break
+                    return item['id']
 
-    return track_id
+    return None
 
 
 def scrape_range(main_url, hours):
