@@ -1,14 +1,20 @@
 import os
+import sys
 import re
-import datetime
+from datetime import datetime, timedelta
+import time
 import argparse
 import json
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import psycopg2 as pg
 
+CHUNK_SIZE = 95
 
-def spotify_add_tracks(config, start, stop):
+time_re = re.compile('[0-2]{1}[0-9]{1}:[0-9]{2}')
+
+
+def spotify_add_tracks(config, days, start, stop, nofilter=False):
 
     # query DB
     conn = pg.connect(
@@ -18,14 +24,21 @@ def spotify_add_tracks(config, start, stop):
         password=config['passw']
     )
 
+    time_ranges = [f"time BETWEEN '{x['y']}-{x['m']}-{x['d']} {start}' AND '{x['y']}-{x['m']}-{x['d']} {stop}'" for x in days]
+    print('Downloading songs in following time ranges:')
+    for t_range in time_ranges:
+        print(t_range)
+
     cur = conn.cursor()
-    cur.execute("SELECT spotify_id FROM radiofm WHERE spotify_id IS NOT NULL\
-         AND time BETWEEN '" + start + "' AND '" + stop + "' ORDER BY time")
+    cur.execute(f"SELECT spotify_id FROM radiofm WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
     results = cur.fetchall()
 
-    track_ids = [x[0] for x in results]
+    track_ids = [x[0] for x in results if x[0]]
 
-    # add on spotify
+    if not nofilter:
+        track_ids = list(set(track_ids))
+
+    # Add on spotify
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
                                                    client_id=config['sp_client_id'],
                                                    client_secret=config['sp_client_secret'],
@@ -41,7 +54,10 @@ def spotify_add_tracks(config, start, stop):
         playlist_id = new_playlist['id']
 
     if not len(track_ids) == 0:
-        sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids)
+        for i in range(0, len(track_ids), CHUNK_SIZE):
+            print(track_ids[i:i + CHUNK_SIZE])
+            sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids[i:i + CHUNK_SIZE])
+            time.sleep(1)
         print('Succesfully added '+str(len(track_ids))+' songs to playlist '+config['playlist']+' of user '+config['user'])
     else:
         print('No Spotify tracks found in selected range.')
@@ -53,43 +69,42 @@ def spotify_add_tracks(config, start, stop):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Import songs scraped from radiofm to spotify playlist')
-    subparsers = parser.add_subparsers(help='Select action')
-    
-    prs_conf = subparsers.add_parser('conf', help='Load from config.json file')
-    prs_conf.add_argument('start', help='time from "1990-11-25 12:34"')
-    prs_conf.add_argument('stop', help='time from "1990-11-25 13:34"')
-    prs_conf.set_defaults(action='conf')
-
-    prs_args = subparsers.add_parser('args', help='Supply args')
-    prs_args.add_argument('user', help='Spotify username')
-    prs_args.add_argument('-playlist', default='radiofm_playlist', help='Spotify playlist')
-    prs_args.add_argument('start', help='time from "1990-11-25 12:34"')
-    prs_args.add_argument('stop', help='time from "1990-11-25 13:34"')
-    prs_args.add_argument('passw', help='DB password')
-    prs_args.add_argument('db', help='DB host')
-    prs_args.add_argument('-url', default='https://fm.rtvs.sk/playlist', help='Radiofm playlist url')
-    prs_args.set_defaults(action='args')
+    parser.add_argument('-c', '--config', default='config.json', help='config file path')
+    parser.add_argument('-y', '--year', help='year, current by default')
+    parser.add_argument('-m', '--month', help='month, current by default')
+    parser.add_argument('-d', '--day', nargs='+', help='day (or multiple)')
+    parser.add_argument('-l', '--last', help='select *n* last days starting with yesterday', default='1')
+    parser.add_argument('-s', '--start', help='start time hh:mm', default='07:00')
+    parser.add_argument('-e', '--end', help='end time hh:mm', default='16:00')
+    parser.add_argument('-nf', '--nofilter', action='store_true', help='If set, duplicitous songs will NOT be removed')
 
     args = parser.parse_args()
 
-    if args.action == 'conf' and os.path.exists('config.json'):
-        with open('config.json', 'r') as f:
+    if os.path.exists(args.config):
+        with open(args.config, 'r') as f:
             config = json.load(f)
+    else:
+        print(f'The config file "{args.config}" not found')
+        sys.exit()
+
+    now = datetime.now()
+
+    year = now.year if args.year is None else args.year
+    month = now.month if args.month is None else args.month
+
+    if args.day is not None and len(args.day) > 0:
+        days = [{'d': x, 'm': month, 'y': year} for x in args.day]
 
     else:
-        config = {
-            'user': args.user,
-            'playlist': args.playlist,
-            'pass': args.passw,
-            'db': args.db,
-            'url': args.url
-        }
-    
-    start, stop = args.start, args.stop
-    if not re.search('[0-9]{4}', args.start) and not re.search('[0-9]{4}', args.stop):
-        now = datetime.datetime.now()
-        start = str(now.year) + ',' + start
-        stop = str(now.year) + ',' + stop
-        print(start, stop)
+        days = []
+        for i in range(1, int(args.last) + 1):
+            dt_day = now - timedelta(days=i)
+            days.append({'d': dt_day.day, 'm': dt_day.month, 'y': dt_day.year})
 
-    spotify_add_tracks(config, start, stop)
+    start, end = args.start, args.end
+
+    if time_re.match(start) is None or time_re.match(end) is None:
+        print('Wrong time format used')
+        sys.exit()
+
+    spotify_add_tracks(config, days, start, end, nofilter=args.nofilter)
