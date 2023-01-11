@@ -55,7 +55,6 @@ def spotify_add_tracks(config, days, start, stop, nofilter=False):
 
     if not len(track_ids) == 0:
         for i in range(0, len(track_ids), CHUNK_SIZE):
-            print(track_ids[i:i + CHUNK_SIZE])
             sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids[i:i + CHUNK_SIZE])
             time.sleep(1)
         print('Succesfully added '+str(len(track_ids))+' songs to playlist '+config['playlist']+' of user '+config['user'])
