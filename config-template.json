@@ -1,8 +1,10 @@
 {
     "user": "user",
     "playlist": "radiofm_playlist",
+    "db_user": "radiofm",
     "passw": "the_password",
-    "db": "db_address",
+    "db_host": "db_address",
+    "db": "radiofm",
     "url": "https://fm.rtvs.sk/playlist",
     "sp_client_id": "id",
     "sp_client_secret": "id"

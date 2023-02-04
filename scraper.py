@@ -4,11 +4,11 @@ import requests
 from datetime import datetime
 import itertools
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.cache_handler import MemoryCacheHandler
 from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 import psycopg2 as pg
-from psycopg2.errors import UniqueViolation
 
 
 def scrape_n_store(config, hours=5):
@@ -19,9 +19,9 @@ def scrape_n_store(config, hours=5):
 
     # connect DB
     conn = pg.connect(
-        host=config['db'],
-        database='radiofm',
-        user='radiofm',
+        host=config['db_host'],
+        database=config['db'],
+        user=config['db_user'],
         password=config['passw']
     )
 
@@ -29,15 +29,21 @@ def scrape_n_store(config, hours=5):
     tracks, timestamps = scrape_range(config['url'], hours)
 
     # find on spofity & insert into db
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
-                                                   client_id=config['sp_client_id'],
-                                                   client_secret=config['sp_client_secret'],
-                                                   redirect_uri='http://localhost:8080/'))
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=config['sp_client_id'],
+            client_secret=config['sp_client_secret'],
+            cache_handler=MemoryCacheHandler()      # used in Lambda
+        ),
+        requests_timeout=10
+    )
 
     cur = conn.cursor()
     cur.execute('SELECT time FROM radiofm ORDER BY time DESC NULLS LAST LIMIT 1')
     maxtime_db = cur.fetchone()
     maxtime_db = maxtime_db[0].replace(tzinfo=None) if maxtime_db is not None else datetime.min
+
+    insert_data = []
 
     for i in range(len(tracks)):
         if timestamps[i] < maxtime_db:
@@ -48,19 +54,18 @@ def scrape_n_store(config, hours=5):
         except Exception as e:
             print(e) 
             track_id = None
+        
+        insert_data.append([str(timestamps[i]), tracks[i][0].replace("'", "''"), tracks[i][1].replace("'", "''"), track_id])
 
-        columns = ['time', 'artist', 'song']
-        values = [str(timestamps[i]), tracks[i][0], tracks[i][1]]
-        if track_id is not None:
-            columns.append('spotify_id')
-            values.append(track_id)
-        values = ["E'" + x.replace("'", "\\'") + "'" for x in values]
+    tick = "'"
+    insert_strs = [f"('{x[0]}', '{x[1]}', '{x[2]}', {tick + x[3] + tick if x[3] is not None else 'NULL'})" for x in insert_data]
+    val_str = ', '.join(insert_strs)
 
-        sql = "INSERT INTO radiofm (" + ', '.join(columns) + ") VALUES ("+ ', '.join(values) + ")"
-        try:
-            cur.execute(sql)
-        except UniqueViolation:
-            pass
+    sql = f"""
+        INSERT INTO radiofm (time, artist, song, spotify_id) VALUES {val_str}
+        ON CONFLICT ON CONSTRAINT radiofm_time_artist_song_key DO NOTHING;
+    """
+    cur.execute(sql)
 
     conn.commit()
     cur.close()

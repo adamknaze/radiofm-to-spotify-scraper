@@ -18,9 +18,9 @@ def spotify_add_tracks(config, days, start, stop, nofilter=False):
 
     # query DB
     conn = pg.connect(
-        host=config['db'],
-        database='radiofm',
-        user='radiofm',
+        host=config['db_host'],
+        database=config['db'],
+        user=config['db_user'],
         password=config['passw']
     )
 
