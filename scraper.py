@@ -1,20 +1,19 @@
-import sys
 import json
-import requests
+import sys
 from datetime import datetime
 import itertools
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from spotipy.cache_handler import MemoryCacheHandler
-from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 import psycopg2 as pg
 
+from radio_scrapers import scrape_range
 
-def scrape_n_store(config, hours=5):
+
+def scrape_n_store(config, station='radiofm'):
     '''
-    Scrape tracks from RadioFM playlist, search last <HOURS> hours.
-    Insert to db.
+    Scrape tracks from public radio playlist, insert to db.
     '''
 
     # connect DB
@@ -26,7 +25,7 @@ def scrape_n_store(config, hours=5):
     )
 
     # scrape tracks
-    tracks, timestamps = scrape_range(config['url'], hours)
+    tracks_timestamps = scrape_range(station, config['stations'][station])
 
     # find on spofity & insert into db
     sp = spotipy.Spotify(
@@ -39,31 +38,36 @@ def scrape_n_store(config, hours=5):
     )
 
     cur = conn.cursor()
-    cur.execute('SELECT time FROM radiofm ORDER BY time DESC NULLS LAST LIMIT 1')
+    cur.execute(f"SELECT time FROM {config['stations'][station]['db_table']} ORDER BY time DESC NULLS LAST LIMIT 1")
     maxtime_db = cur.fetchone()
     maxtime_db = maxtime_db[0].replace(tzinfo=None) if maxtime_db is not None else datetime.min
 
     insert_data = []
 
-    for i in range(len(tracks)):
-        if timestamps[i] < maxtime_db:
+    for track_timestamp in tracks_timestamps:
+        if track_timestamp[2].replace(tzinfo=None) < maxtime_db:
             continue
 
         try:
-            track_id = find_on_spotify(sp, tracks[i][0], tracks[i][1])
+            track_id = find_on_spotify(sp, track_timestamp[0], track_timestamp[1])
         except Exception as e:
             print(e) 
             track_id = None
-        
-        insert_data.append([str(timestamps[i]), tracks[i][0].replace("'", "''"), tracks[i][1].replace("'", "''"), track_id])
+
+        insert_data.append([
+            str(track_timestamp[2]),
+            track_timestamp[0].replace("'", "''"),
+            track_timestamp[1].replace("'", "''"),
+            track_id
+        ])
 
     tick = "'"
     insert_strs = [f"('{x[0]}', '{x[1]}', '{x[2]}', {tick + x[3] + tick if x[3] is not None else 'NULL'})" for x in insert_data]
     val_str = ', '.join(insert_strs)
 
     sql = f"""
-        INSERT INTO radiofm (time, artist, song, spotify_id) VALUES {val_str}
-        ON CONFLICT ON CONSTRAINT radiofm_time_artist_song_key DO NOTHING;
+        INSERT INTO {config['stations'][station]['db_table']} (time, artist, song, spotify_id) VALUES {val_str}
+        ON CONFLICT ON CONSTRAINT {config['stations'][station]['db_table']}_time_artist_song_key DO NOTHING;
     """
     cur.execute(sql)
 
@@ -100,52 +104,30 @@ def find_on_spotify(sp, artist, song):
     return None
 
 
-def scrape_range(main_url, hours):
-
-    page = 1
-    tracks, timestamps = scrape_page(main_url)
+def lambda_handler(event, context):
     
-    while True:
+    print('event', event)
 
-        page += 1
-        next_tracks, next_timestamps = scrape_page(main_url + '?page=' + str(page))
-    
-        if (timestamps[0] - next_timestamps[0]).total_seconds() / 60 / 60 > hours:
-            break
-
-        for i in range(len(next_tracks)):
-            if not next_timestamps[i] in timestamps:
-                tracks.append(next_tracks[i])
-                timestamps.append(next_timestamps[i])
-
-    return tracks, timestamps
-
-
-def scrape_page(url):
-
-    try:    
-        html = requests.get(url)    
-    except Exception as e:    
-        print(e)    
-        sys.exit(0)    
-
-    tracks_list = []
-    timestamps = []
-
-    soup = BeautifulSoup(html.text, 'html.parser')
-    rows = soup.find_all("table", {"class" : "table--playlist"}, limit=1)[0].find("tbody").find_all("tr")
-    for row in rows:
-        cells = row.find_all("td")
-        tracks_list.append((cells[2].get_text(), cells[3].get_text()))
-        timestamp = '-'.join(list(reversed(cells[0].get_text().split('.')))) + ' ' + cells[1].get_text()
-        timestamps.append(datetime.strptime(timestamp, '%Y-%m-%d %H:%M'))
-    
-    return tracks_list, timestamps
-
-
-if __name__ == "__main__":
+    if 'target_radio' not in event:
+        return {
+            'statusCode': 400,
+            'body': json.dumps('Missing target radio argument in the trigger event')
+        }
 
     with open('config.json', 'r') as f:
         config = json.load(f)
 
-    scrape_n_store(config)
+    scrape_n_store(config, event['target_radio'])
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Function run successfully')
+    }
+
+
+# if __name__ == "__main__":
+
+#     with open('config.json', 'r') as f:
+#         config = json.load(f)
+
+#     scrape_n_store(config, sys.argv[1])

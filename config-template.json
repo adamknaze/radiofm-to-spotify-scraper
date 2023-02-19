@@ -1,11 +1,21 @@
 {
-    "user": "user",
+    "user": "",
     "playlist": "radiofm_playlist",
-    "db_user": "radiofm",
-    "passw": "the_password",
-    "db_host": "db_address",
-    "db": "radiofm",
-    "url": "https://fm.rtvs.sk/playlist",
-    "sp_client_id": "id",
-    "sp_client_secret": "id"
+    "db_user": "",
+    "passw": "",
+    "db_host": "",
+    "db": "",
+    "stations":{
+        "radiofm":{
+            "url": "https://fm.rtvs.sk/playlist",
+            "db_table": "radiofm",
+            "hours": 5
+        },
+        "wave":{
+            "url": "https://api.rozhlas.cz/data/v2/playlist/day/{year}/{month:02d}/{day:02d}/radiowave.json",
+            "db_table": "wave"
+        }
+    },
+    "sp_client_id": "",
+    "sp_client_secret": ""
 }

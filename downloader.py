@@ -14,7 +14,7 @@ CHUNK_SIZE = 95
 time_re = re.compile('[0-2]{1}[0-9]{1}:[0-9]{2}')
 
 
-def spotify_add_tracks(config, days, start, stop, nofilter=False):
+def spotify_add_tracks(config, station, days, start, stop, nofilter=False):
 
     # query DB
     conn = pg.connect(
@@ -25,12 +25,12 @@ def spotify_add_tracks(config, days, start, stop, nofilter=False):
     )
 
     time_ranges = [f"time BETWEEN '{x['y']}-{x['m']}-{x['d']} {start}' AND '{x['y']}-{x['m']}-{x['d']} {stop}'" for x in days]
-    print('Downloading songs in following time ranges:')
+    print(f'Downloading songs played on {station} in following time ranges:')
     for t_range in time_ranges:
         print(t_range)
 
     cur = conn.cursor()
-    cur.execute(f"SELECT spotify_id FROM radiofm WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
+    cur.execute(f"SELECT spotify_id FROM {config[station]['db_table']} WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
     results = cur.fetchall()
 
     track_ids = [x[0] for x in results if x[0]]
@@ -76,6 +76,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--start', help='start time hh:mm', default='07:00')
     parser.add_argument('-e', '--end', help='end time hh:mm', default='16:00')
     parser.add_argument('-nf', '--nofilter', action='store_true', help='If set, duplicitous songs will NOT be removed')
+    parser.add_argument('-s', '--station', default='radiofm', help='radio station to be downloaded')
 
     args = parser.parse_args()
 
@@ -106,4 +107,4 @@ if __name__ == "__main__":
         print('Wrong time format used')
         sys.exit()
 
-    spotify_add_tracks(config, days, start, end, nofilter=args.nofilter)
+    spotify_add_tracks(config, args.station, days, start, end, nofilter=args.nofilter)

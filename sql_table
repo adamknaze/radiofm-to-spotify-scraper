@@ -6,3 +6,17 @@ CREATE TABLE radiofm (
     spotify_id VARCHAR(30),
     UNIQUE (time, artist, song)
 );
+
+CREATE TABLE wave (
+    id SERIAL PRIMARY KEY,
+    time TIMESTAMP NOT NULL,
+    artist VARCHAR(100) NOT NULL,
+    song VARCHAR(100) NOT NULL,
+    spotify_id VARCHAR(30),
+    UNIQUE (time, artist, song)
+);
+
+
+GRANT ALL PRIVILEGES ON wave TO radiofm;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public to radiofm;
