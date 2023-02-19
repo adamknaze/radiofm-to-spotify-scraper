@@ -30,7 +30,7 @@ def spotify_add_tracks(config, station, days, start, stop, nofilter=False):
         print(t_range)
 
     cur = conn.cursor()
-    cur.execute(f"SELECT spotify_id FROM {config[station]['db_table']} WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
+    cur.execute(f"SELECT spotify_id FROM {config['stations'][station]['db_table']} WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
     results = cur.fetchall()
 
     track_ids = [x[0] for x in results if x[0]]
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--start', help='start time hh:mm', default='07:00')
     parser.add_argument('-e', '--end', help='end time hh:mm', default='16:00')
     parser.add_argument('-nf', '--nofilter', action='store_true', help='If set, duplicitous songs will NOT be removed')
-    parser.add_argument('-s', '--station', default='radiofm', help='radio station to be downloaded')
+    parser.add_argument('-r', '--radio', default='radiofm', help='radio station to be downloaded')
 
     args = parser.parse_args()
 
@@ -107,4 +107,4 @@ if __name__ == "__main__":
         print('Wrong time format used')
         sys.exit()
 
-    spotify_add_tracks(config, args.station, days, start, end, nofilter=args.nofilter)
+    spotify_add_tracks(config, args.radio, days, start, end, nofilter=args.nofilter)
