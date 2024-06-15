@@ -9,7 +9,17 @@
         "radiofm":{
             "url": "https://fm.rtvs.sk/playlist",
             "db_table": "radiofm",
-            "hours": 5
+            "hours": 5,
+            "auto_playlists":{
+                "radiofm_vcera":{
+                    "playlist_id": ""
+                },
+                "radiofm_vcera_all":{
+                    "playlist_id": "",
+                    "start": "00:00",
+                    "stop": "23:59"
+                }
+            }
         },
         "wave":{
             "url": "https://api.rozhlas.cz/data/v2/playlist/day/{year}/{month:02d}/{day:02d}/radiowave.json",

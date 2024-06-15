@@ -6,3 +6,4 @@ test*
 radiofm_dump*
 scraper_layer.zip
 temp*
+__pycache__

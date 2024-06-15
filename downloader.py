@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+from collections import OrderedDict
 from datetime import datetime, timedelta
 import time
 import argparse
@@ -36,7 +37,7 @@ def spotify_add_tracks(config, station, days, start, stop, nofilter=False):
     track_ids = [x[0] for x in results if x[0]]
 
     if not nofilter:
-        track_ids = list(set(track_ids))
+        track_ids = list(OrderedDict.fromkeys(track_ids))
 
     # Add on spotify
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',

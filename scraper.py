@@ -1,14 +1,19 @@
+import time
+from datetime import datetime, timedelta
+from collections import OrderedDict
 import json
-import sys
 from datetime import datetime
 import itertools
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 from spotipy.cache_handler import MemoryCacheHandler
 from fuzzywuzzy import fuzz
 import psycopg2 as pg
 
 from radio_scrapers import scrape_range
+from PostgresCacheHandler import PostgresCacheHandler
+
+CHUNK_SIZE = 95
 
 
 def scrape_n_store(config, station='radiofm'):
@@ -104,9 +109,88 @@ def find_on_spotify(sp, artist, song):
     return None
 
 
+def spotify_daily_add_tracks(config, playlist_id, station='radiofm', days=[-1], start='07:00', stop='18:00', nofilter=False):
+
+    now = datetime.now()
+    dates = []
+    for day in days:
+        if day < 0:
+            dt_day = now - timedelta(days=-day)
+            dates.append({'d': dt_day.day, 'm': dt_day.month, 'y': dt_day.year})
+        else:
+            dates.append({'d': day, 'm': now.month, 'y': now.year})
+
+    # query DB
+    conn = pg.connect(
+        host=config['db_host'],
+        database=config['db'],
+        user=config['db_user'],
+        password=config['passw']
+    )
+
+    time_ranges = [f"time BETWEEN '{x['y']}-{x['m']}-{x['d']} {start}' AND '{x['y']}-{x['m']}-{x['d']} {stop}'" for x in dates]
+
+    cur = conn.cursor()
+    cur.execute(f"SELECT spotify_id FROM {config['stations'][station]['db_table']} WHERE spotify_id IS NOT NULL AND ({' OR '.join(time_ranges)}) ORDER BY time;")
+    results = cur.fetchall()
+
+    track_ids = [x[0] for x in results if x[0]]
+
+    # non-consecutive duplicity filter turned ON by default (while I improve the consecutive duplicity removing)
+    if not nofilter:
+        track_ids = list(OrderedDict.fromkeys(track_ids))
+
+    # remove consecutive duplicates # TODO extend to duplications within a small range
+    # track_ids = [x[0] for x in itertools.groupby(track_ids)]
+
+    # Add on spotify
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope='playlist-modify-public',
+                                                   client_id=config['sp_client_id'],
+                                                   client_secret=config['sp_client_secret'],
+                                                   redirect_uri='http://localhost:8080/',
+                                                   cache_handler=PostgresCacheHandler(conn))      # used in Lambda
+    )
+
+
+    playlists = sp.user_playlists(config['user'])
+    playlist_name = 'not found'
+    for item in playlists['items']:
+        if item['id'] == playlist_id:
+            playlist_name = item['name']
+            break
+
+
+    remove_all_tracks_from_playlist(sp, config['user'], playlist_id)
+
+
+    if not len(track_ids) == 0:
+        for i in range(0, len(track_ids), CHUNK_SIZE):
+            sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids[i:i + CHUNK_SIZE])
+            time.sleep(1)
+        print('Succesfully added '+str(len(track_ids))+' songs to playlist '+playlist_name+' of user '+config['user'])
+    else:
+        print('No Spotify tracks found in selected range.')
+
+    cur.close()
+    conn.close()
+
+
+def remove_all_tracks_from_playlist(sp, user, playlist_id):
+
+    results = sp.user_playlist_tracks(user, playlist_id)
+    tracks = results['items']
+
+    while results['next']:
+        results = sp.next(results)
+        tracks.extend(results['items'])
+
+    track_uris = [track['track']['uri'] for track in tracks]
+
+    for i in range(0, len(track_uris), CHUNK_SIZE):
+        sp.user_playlist_remove_all_occurrences_of_tracks(user, playlist_id, track_uris[i:i + CHUNK_SIZE])
+
+
 def lambda_handler(event, context):
-    
-    print('event', event)
 
     if 'target_radio' not in event:
         return {
@@ -116,8 +200,19 @@ def lambda_handler(event, context):
 
     with open('config.json', 'r') as f:
         config = json.load(f)
+    
+    if 'update_daily' not in event:
 
-    scrape_n_store(config, event['target_radio'])
+        scrape_n_store(config, event['target_radio'])
+
+    else:
+        args = config['stations'][event['target_radio']]['auto_playlists'][event['update_daily']]
+
+        days = [-1] if 'days' not in args else args['days']
+        start = '07:00' if 'start' not in args else args['start']
+        stop = '18:00' if 'stop' not in args else args['stop']
+
+        spotify_daily_add_tracks(config, args['playlist_id'], event['target_radio'], days, start, stop)
 
     return {
         'statusCode': 200,
@@ -130,4 +225,4 @@ def lambda_handler(event, context):
 #     with open('config.json', 'r') as f:
 #         config = json.load(f)
 
-#     scrape_n_store(config, sys.argv[1])
+#     lambda_handler({'target_radio': 'radiofm', 'update_daily': 'radiofm_vcera_all'}, None)
