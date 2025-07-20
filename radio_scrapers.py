@@ -2,6 +2,7 @@ import sys
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, date, timedelta
+import time
 
 
 def scrape_range(stat, stat_conf):
@@ -42,9 +43,14 @@ def rtvs_scrape_back(url, hours):
 def rtvs_scrape_page(url):
 
     try:    
-        html = requests.get(url)    
-    except Exception as e:    
-        print(e)    
+        html = requests.get(url)
+        # added reloads due to unreliable rtvs page behaviour
+        time.sleep(1)
+        html = requests.get(url)
+        time.sleep(1.5)
+        html = requests.get(url)
+    except Exception as e:
+        print(e)
         sys.exit(0)
 
     tracks_list = []
