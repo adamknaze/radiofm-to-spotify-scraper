@@ -152,7 +152,7 @@ def spotify_daily_add_tracks(config, playlist_id, station='radiofm', days=[-1], 
     )
 
 
-    playlists = sp.user_playlists(config['user'])
+    playlists = sp.current_user_playlists()
     playlist_name = 'not found'
     for item in playlists['items']:
         if item['id'] == playlist_id:
@@ -160,14 +160,14 @@ def spotify_daily_add_tracks(config, playlist_id, station='radiofm', days=[-1], 
             break
 
 
-    remove_all_tracks_from_playlist(sp, config['user'], playlist_id)
+    remove_all_tracks_from_playlist(sp, playlist_id)
 
 
     if not len(track_ids) == 0:
         for i in range(0, len(track_ids), CHUNK_SIZE):
-            sp.user_playlist_add_tracks(config['user'], playlist_id, track_ids[i:i + CHUNK_SIZE])
+            sp.playlist_add_items(playlist_id, track_ids[i:i + CHUNK_SIZE])
             time.sleep(1)
-        print('Succesfully added '+str(len(track_ids))+' songs to playlist '+playlist_name+' of user '+config['user'])
+        print('Succesfully added '+str(len(track_ids))+' songs to playlist '+playlist_name)
     else:
         print('No Spotify tracks found in selected range.')
 
@@ -175,9 +175,9 @@ def spotify_daily_add_tracks(config, playlist_id, station='radiofm', days=[-1], 
     conn.close()
 
 
-def remove_all_tracks_from_playlist(sp, user, playlist_id):
+def remove_all_tracks_from_playlist(sp, playlist_id):
 
-    results = sp.user_playlist_tracks(user, playlist_id)
+    results = sp.playlist_items(playlist_id, fields='items.track.uri,total,next')
     tracks = results['items']
 
     while results['next']:
@@ -187,7 +187,7 @@ def remove_all_tracks_from_playlist(sp, user, playlist_id):
     track_uris = [track['track']['uri'] for track in tracks]
 
     for i in range(0, len(track_uris), CHUNK_SIZE):
-        sp.user_playlist_remove_all_occurrences_of_tracks(user, playlist_id, track_uris[i:i + CHUNK_SIZE])
+        sp.playlist_remove_all_occurrences_of_items(playlist_id, track_uris[i:i + CHUNK_SIZE])
 
 
 def lambda_handler(event, context):

@@ -1,3 +1,5 @@
+# DEPRECATED - needs to be updated to use limited development mode Spotify API
+
 import os
 import sys
 import re

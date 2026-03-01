@@ -1,0 +1,38 @@
+# Execute in AWS CloudShell
+
+# 1. Create layer directory
+mkdir -p lambda_layer/python
+cd lambda_layer
+
+# 2. Create requirements for PURE Python packages only
+cat <<EOF > requirements.txt
+spotipy
+requests
+beautifulsoup4
+fuzzywuzzy
+EOF
+
+# 3. Install pure python packages normally
+pip3 install -r requirements.txt --target python/
+
+# 4. Install BINARY packages (Psycopg2 & Levenshtein)
+pip3 install \
+    --platform manylinux2014_x86_64 \
+    --target=python/ \
+    --implementation cp \
+    --python-version 3.12 \
+    --only-binary=:all: --upgrade \
+    psycopg2-binary Levenshtein
+
+# 5. Clean up caches
+find python -type d -name "__pycache__" -exec rm -rf {} +
+find python -type d -name "*.dist-info" -exec rm -rf {} +
+
+# 6. Zip and Publish
+zip -r spotify_scraper_layer_v3.zip python
+
+aws lambda publish-layer-version \
+    --layer-name py312-spotipy-scraping \
+    --description "Layer for Py3.12: Spotipy, BS4, Fuzzy, Psycopg2" \
+    --zip-file fileb://spotify_scraper_layer_v3.zip \
+    --compatible-runtimes python3.12
